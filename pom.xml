@@ -150,7 +150,7 @@
 				<version>${jib-build-plugin}</version>
 				<configuration>
 					<to>
-						<image>${artifactId}:latest</image>
+						<image>${project.artifactId}:latest</image>
 					</to>
 					<container>
 						<ports>
