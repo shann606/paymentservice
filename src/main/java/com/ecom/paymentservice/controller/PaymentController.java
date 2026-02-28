@@ -1,6 +1,5 @@
 package com.ecom.paymentservice.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -17,15 +16,14 @@ public class PaymentController {
 
 	private PaymentService paymentService;
 
-	@Autowired
 	public PaymentController(PaymentService paymentService) {
 		this.paymentService = paymentService;
 	}
 
 	@PutMapping("/update")
 	ResponseEntity<String> updatePaymentStatus(@RequestParam(name = "orderno", required = true) Long orderNo,
-			@RequestParam(name = "status", required = true) PaymentStatus status,
-			@RequestParam(name = "reason", required = false) String reason) throws Exception {
+			@RequestParam(required = true) PaymentStatus status,
+			@RequestParam(required = false) String reason) throws Exception {
 
 		String result;
 		int i = paymentService.updatePaymentStatus(orderNo, status, reason);

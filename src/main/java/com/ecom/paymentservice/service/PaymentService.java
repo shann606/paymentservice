@@ -1,9 +1,11 @@
 package com.ecom.paymentservice.service;
 
 import java.time.OffsetDateTime;
+import java.util.concurrent.CompletableFuture;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
 
 import com.ecom.paymentservice.dto.CreatedBy;
@@ -31,7 +33,7 @@ public class PaymentService {
 	}
 
 	@Transactional(rollbackOn = Exception.class)
-	public void processPayment(OrderCreatedEvent orderEvent) throws Exception {
+	public void processPayment(OrderCreatedEvent orderEvent) {
 
 		Payment payment = new Payment();
 		payment.setCreatedBy(CreatedBy.ORDERSERVICE);
@@ -39,10 +41,17 @@ public class PaymentService {
 		payment.setAmount(orderEvent.getAmount());
 		payment.setCreatedOn(orderEvent.getOrderCreatedOn());
 		payment.setPaymentStatus(PaymentStatus.INPROGRESS);
-		paymentRepo.saveAndFlush(payment);
-		log.info("Payment service completed successfully");
-		kafkaTemplate.send("payment-result", PaymentResponseEvent.builder().orderNo(payment.getOrderNo())
-				.paymentStatus(payment.getPaymentStatus()).reason(payment.getReason()).build());
+
+		try {
+			paymentRepo.saveAndFlush(payment);
+			log.info("Payment service completed successfully");
+			kafkaTemplate.send("payment-result", PaymentResponseEvent.builder().orderNo(payment.getOrderNo())
+					.paymentStatus(payment.getPaymentStatus()).reason(payment.getReason()).build());
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			throw e;
+		}
 
 	}
 
@@ -53,8 +62,17 @@ public class PaymentService {
 
 		if (i == 1) {
 			log.info("payment status updated successfully sending back to Order service");
-			kafkaTemplate.send("payment-update",
+			CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send("payment-update",
 					PaymentResponseEvent.builder().orderNo(orderNo).paymentStatus(status).reason(reason).build());
+
+			future.whenComplete((result, ex) -> {
+				if (ex == null) {
+					log.info("Payment data sent successfully");
+				} else {
+					log.info("having issue not sent successfully" + ex.getMessage());
+				}
+			});
+
 		}
 		return i;
 	}
