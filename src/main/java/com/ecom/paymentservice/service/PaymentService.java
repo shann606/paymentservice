@@ -3,7 +3,7 @@ package com.ecom.paymentservice.service;
 import java.time.OffsetDateTime;
 import java.util.concurrent.CompletableFuture;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
@@ -24,8 +24,12 @@ public class PaymentService {
 
 	private PaymentRepository paymentRepo;
 	private final KafkaTemplate<String, Object> kafkaTemplate;
+	@Value("${service.topic.payment.result}")
+	private String result;
+	@Value("${service.topic.payment.update}")
+	private String update;
 
-	@Autowired
+	
 	public PaymentService(PaymentRepository paymentRepo, KafkaTemplate<String, Object> kafkaTemplate) {
 		this.kafkaTemplate = kafkaTemplate;
 		this.paymentRepo = paymentRepo;
@@ -45,7 +49,7 @@ public class PaymentService {
 		try {
 			paymentRepo.saveAndFlush(payment);
 			log.info("Payment service completed successfully");
-			kafkaTemplate.send("payment-result", PaymentResponseEvent.builder().orderNo(payment.getOrderNo())
+			kafkaTemplate.send(result, PaymentResponseEvent.builder().orderNo(payment.getOrderNo())
 					.paymentStatus(payment.getPaymentStatus()).reason(payment.getReason()).build());
 
 		} catch (Exception e) {
@@ -56,19 +60,21 @@ public class PaymentService {
 	}
 
 	public int updatePaymentStatus(Long orderNo, PaymentStatus status, String reason) throws Exception {
-
+		
+		log.info("Are we getting the data :::" + update);
 		int i = paymentRepo.updatePaymentStatus(orderNo, status, reason, CreatedBy.PAYMENTSERVICE,
 				OffsetDateTime.now());
 
 		if (i == 1) {
 			log.info("payment status updated successfully sending back to Order service");
-			CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send("payment-update",
+			CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(update,
 					PaymentResponseEvent.builder().orderNo(orderNo).paymentStatus(status).reason(reason).build());
 
 			future.whenComplete((result, ex) -> {
 				if (ex == null) {
 					log.info("Payment data sent successfully");
 				} else {
+					log.info("result after send "+result.toString());
 					log.info("having issue not sent successfully" + ex.getMessage());
 				}
 			});

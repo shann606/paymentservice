@@ -15,12 +15,13 @@ import lombok.extern.slf4j.Slf4j;
 public class OrderCreatedListener {
 
 	private PaymentService paymentService;
-    @Lazy
+
+	@Lazy
 	public OrderCreatedListener(PaymentService paymentService) {
 		this.paymentService = paymentService;
 	}
 
-	@KafkaListener(topics = "order-created", groupId = "payment-service-group")
+	@KafkaListener(topics = "${service.topic.order.created}", groupId = "payment-service-group")
 	public void orderConsume(OrderCreatedEvent orderEvent, Acknowledgment ack) {
 		log.info("receving the topic for the order no ::" + orderEvent.getOrderNo());
 		paymentService.processPayment(orderEvent);
