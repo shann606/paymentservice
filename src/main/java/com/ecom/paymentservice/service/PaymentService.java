@@ -1,5 +1,6 @@
 package com.ecom.paymentservice.service;
 
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.concurrent.CompletableFuture;
 
@@ -28,8 +29,8 @@ public class PaymentService {
 	private String result;
 	@Value("${service.topic.payment.update}")
 	private String update;
+	private Clock clock = Clock.systemUTC();
 
-	
 	public PaymentService(PaymentRepository paymentRepo, KafkaTemplate<String, Object> kafkaTemplate) {
 		this.kafkaTemplate = kafkaTemplate;
 		this.paymentRepo = paymentRepo;
@@ -46,41 +47,41 @@ public class PaymentService {
 		payment.setCreatedOn(orderEvent.getOrderCreatedOn());
 		payment.setPaymentStatus(PaymentStatus.INPROGRESS);
 
-		try {
-			paymentRepo.saveAndFlush(payment);
-			log.info("Payment service completed successfully");
-			kafkaTemplate.send(result, PaymentResponseEvent.builder().orderNo(payment.getOrderNo())
-					.paymentStatus(payment.getPaymentStatus()).reason(payment.getReason()).build());
-
-		} catch (Exception e) {
-			e.printStackTrace();
-			throw e;
-		}
+		paymentRepo.saveAndFlush(payment);
+		sendResponseBack(result, PaymentResponseEvent.builder().orderNo(payment.getOrderNo())
+				.paymentStatus(payment.getPaymentStatus()).reason(payment.getReason()).build());
 
 	}
 
 	public int updatePaymentStatus(Long orderNo, PaymentStatus status, String reason) throws Exception {
-		
+
 		log.info("Are we getting the data :::" + update);
 		int i = paymentRepo.updatePaymentStatus(orderNo, status, reason, CreatedBy.PAYMENTSERVICE,
-				OffsetDateTime.now());
+				OffsetDateTime.now(clock));
 
 		if (i == 1) {
-			log.info("payment status updated successfully sending back to Order service");
-			CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(update,
+
+			sendResponseBack(update,
 					PaymentResponseEvent.builder().orderNo(orderNo).paymentStatus(status).reason(reason).build());
-
-			future.whenComplete((result, ex) -> {
-				if (ex == null) {
-					log.info("Payment data sent successfully");
-				} else {
-					log.info("result after send "+result.toString());
-					log.info("having issue not sent successfully" + ex.getMessage());
-				}
-			});
-
 		}
 		return i;
+	}
+
+	private void sendResponseBack(String action, PaymentResponseEvent payment) {
+
+		log.info("payment status updated successfully sending back to Order service");
+		CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(action, payment);
+
+		future.whenComplete((data, ex) -> {
+			if (ex == null) {
+				log.info("Payment data sent successfully , printing the offset ::: " + action + "-->"
+						+ data.getRecordMetadata().offset());
+			} else {
+
+				log.info("having issue not sent successfully" + ex);
+			}
+		});
+
 	}
 
 }
